@@ -120,8 +120,8 @@ class CausalSelfAttention(nn.Module):
             """
             TODO: Initialize the RotaryPositionalEmbeddings class with the relevant arguments
             """
-            self.query_rotary_pe = RotaryPositionalEmbeddings(d=config.n_embd // n_head) # Do NOT rename self.query_rotary_pe.
-            self.key_rotary_pe = RotaryPositionalEmbeddings(d=config.n_embd // n_head) # Do NOT rename self.key_rotary_pe.
+            self.query_rotary_pe = RotaryPositionalEmbeddings(d=config.n_embd // self.n_head) # Do NOT rename self.query_rotary_pe.
+            self.key_rotary_pe = RotaryPositionalEmbeddings(d=config.n_embd // self.n_head) # Do NOT rename self.key_rotary_pe.
         
     def forward(self, x):
         b, t, n_embd = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
