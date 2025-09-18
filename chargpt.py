@@ -14,40 +14,53 @@ from mingpt.model import GPT
 from mingpt.trainer import Trainer
 from mingpt.utils import set_seed, setup_logging, CfgNode as CN
 import pickle
-import matplotlib.pyplot as plt
+import wandb
 # -----------------------------------------------------------------------------
 
-def plot_training_loss(losses=None, work_dir=None, save_path=True):
-    if not losses:
-        raise ValueError("No loss data to plot.")
+def init_wandb(config, project_name="genai-hw1", run_name=None):
+    wandb.login(key="70ad0e50e6f88ac5b7d741fe07f987c83c5cd75e")
+    wandb_config = {
+        "model": {
+            "n_layer": config.model.n_layer,
+            "n_query_head": config.model.n_query_head,
+            "n_kv_head": config.model.n_kv_head,
+            "n_embd": config.model.n_embd,
+            "rope": config.model.rope,
+            "block_size": config.model.block_size,
+            "vocab_size": getattr(config.model, 'vocab_size', None)
+        },
+        "trainer": {
+            "max_iters": config.trainer.max_iters,
+            "batch_size": config.trainer.batch_size,
+            "learning_rate": config.trainer.learning_rate,
+            "weight_decay": config.trainer.weight_decay,
+            "grad_norm_clip": config.trainer.grad_norm_clip
+        },
+        "data": {
+            "block_size": config.data.block_size
+        }
+    }
     
-    fig, ax = plt.subplots(1, 1, figsize=(10, 6))
+    run = wandb.init(
+        project=project_name,
+        name=run_name,
+        config=wandb_config,
+        save_code=True
+    )
     
-    iterations = range(1, len(losses) + 1)
-    ax.plot(iterations, losses, 'b-', linewidth=1.5, alpha=0.8)
-    ax.set_xlabel('Iteration')
-    ax.set_ylabel('Training Loss')
-    ax.set_title('Training Loss Over Time')
-    ax.grid(True, alpha=0.3)
+    return run
+
+def log_metrics_to_wandb(loss, attn_time, memory_consumed=None, iteration=None):
+    metrics = {
+        "train/loss": loss,
+        "train/attention_time_ms": attn_time * 1000,
+        "train/iteration": iteration
+    }
     
-    min_loss = min(losses)
-    min_iter = losses.index(min_loss) + 1
-    final_loss = losses[-1]
+    if memory_consumed is not None:
+        metrics["train/memory_mb"] = memory_consumed
     
-    # ax.axhline(y=min_loss, color='r', linestyle='--', alpha=0.7, label=f'Min Loss: {min_loss:.4f} (iter {min_iter})')
-    # ax.legend()
-    
-    # stats_text = f'Final Loss: {final_loss:.4f}\nMin Loss: {min_loss:.4f}\nTotal Iterations: {len(losses)}'
-    # ax.text(0.02, 0.98, stats_text, transform=ax.transAxes, 
-    #         verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
-    
-    plt.tight_layout()
-    
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Plot saved to {save_path}")
-    
-    return fig
+    wandb.log(metrics, step=iteration)
 
 def get_config():
 
@@ -144,6 +157,10 @@ if __name__ == '__main__':
     
     setup_logging(config)
 
+    # Initialize Weights & Biases
+    run_name = f"gpt-{config.model.n_layer}L-{config.model.n_query_head}QH-{config.model.n_kv_head}KH-rope_{config.model.rope}"
+    wandb_run = init_wandb(config, project_name="genai-hw1", run_name=run_name)
+
     # construct the trainer object
     trainer = Trainer(config.trainer, model, train_dataset)
 
@@ -155,11 +172,22 @@ if __name__ == '__main__':
         if trainer.iter_num % 1 == 0:
             train_losses.append(trainer.loss.item())
             attn_times.append(trainer.attn_times*1000)
+            
+            # Log to wandb every iteration
+            memory_mb = None
             if trainer.device=="cuda":
                 print(f"iter_dt {trainer.iter_dt:.2f}s; iter {trainer.iter_num}: train loss {trainer.loss.item():.5f};attn_times {trainer.attn_times*1000:.2f}ms;mem_consumed {trainer.memory_consumed/(1024*1024):.2f}MB")
                 attn_mem.append(trainer.memory_consumed/(1024*1024))
             else:
                 print(f"iter_dt {trainer.iter_dt:.2f}s; iter {trainer.iter_num}: train loss {trainer.loss.item():.5f};attn_times {trainer.attn_times*1000:.2f}ms;mem_consumed - not available on CPU")
+            
+            # Log metrics to wandb
+            log_metrics_to_wandb(
+                loss=trainer.loss.item(),
+                attn_time=trainer.attn_times,
+                memory_consumed=memory_mb,
+                iteration=trainer.iter_num
+            )
 
         if (trainer.iter_num + 1) % 200 == 0:
             # evaluate both the train and test score
@@ -174,6 +202,11 @@ if __name__ == '__main__':
                 completion = ''.join([train_dataset.itos[int(i)] for i in y])
                 print(completion)
                 print(f"Attention computation took {attn_time*1000:.2f}ms to run for {config.data.block_size} seq length")
+                
+                wandb.log({
+                    "samples/generated_text": wandb.Html(f"<pre>{completion}</pre>"),
+                    "samples/generation_time_ms": attn_time * 1000
+                }, step=trainer.iter_num)
             # save the latest model
             print("saving model")
             ckpt_path = os.path.join(config.system.work_dir, "model.pt")
@@ -186,11 +219,12 @@ if __name__ == '__main__':
             with open(os.path.join(config.system.work_dir, 'attention_computation_memory.json'), 'w') as f:
                 json.dump(attn_mem, f, ensure_ascii=False, indent=4)
             
-            plot_path = os.path.join(config.system.work_dir, 'training_loss_plot.png')
-            plot_training_loss(losses=train_losses, save_path=plot_path, show_plot=False)
             model.train()
 
     trainer.set_callback('on_batch_end', batch_end_callback)
 
     # run the optimization
     trainer.run()
+    
+    # Finish wandb run
+    wandb.finish()
