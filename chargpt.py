@@ -157,7 +157,6 @@ if __name__ == '__main__':
     
     setup_logging(config)
 
-    # Initialize Weights & Biases
     run_name = f"gpt-{config.model.n_layer}L-{config.model.n_query_head}QH-{config.model.n_kv_head}KH-rope_{config.model.rope}"
     wandb_run = init_wandb(config, project_name="genai-hw1", run_name=run_name)
 
@@ -173,7 +172,6 @@ if __name__ == '__main__':
             train_losses.append(trainer.loss.item())
             attn_times.append(trainer.attn_times*1000)
             
-            # Log to wandb every iteration
             memory_mb = None
             if trainer.device=="cuda":
                 print(f"iter_dt {trainer.iter_dt:.2f}s; iter {trainer.iter_num}: train loss {trainer.loss.item():.5f};attn_times {trainer.attn_times*1000:.2f}ms;mem_consumed {trainer.memory_consumed/(1024*1024):.2f}MB")
@@ -181,7 +179,6 @@ if __name__ == '__main__':
             else:
                 print(f"iter_dt {trainer.iter_dt:.2f}s; iter {trainer.iter_num}: train loss {trainer.loss.item():.5f};attn_times {trainer.attn_times*1000:.2f}ms;mem_consumed - not available on CPU")
             
-            # Log metrics to wandb
             log_metrics_to_wandb(
                 loss=trainer.loss.item(),
                 attn_time=trainer.attn_times,
@@ -194,7 +191,7 @@ if __name__ == '__main__':
             model.eval()
             with torch.no_grad():
                 # sample from the model...
-                context = "O God, O God!"
+                context = "God for his mercy!"
                 encoded_context = [train_dataset.stoi[s] for s in context]
                 x = torch.tensor(encoded_context, dtype=torch.long)[None,...].to(trainer.device)
                 y, attn_time = model.generate(x, 500, temperature=1.0, do_sample=True, top_k=10)
