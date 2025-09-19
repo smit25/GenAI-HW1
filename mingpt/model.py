@@ -63,9 +63,9 @@ class RotaryPositionalEmbeddings(nn.Module):
         dims = torch.arange(self.d // 2).float()
         inv_freq = 1.0 / (self.base ** (2*dims / (self.d)))
         t = torch.arange(1,N+1).float()
-        self.cache = torch.outer(t, inv_freq)
-        self.sin_cache = torch.sin(self.cache).unsqueeze(0)
-        self.cos_cache = torch.cos(self.cache).unsqueeze(0)
+        self.cache = torch.outer(t, inv_freq).to(Y.device)
+        self.sin_cache = torch.sin(self.cache).unsqueeze(0).to(Y.device)
+        self.cos_cache = torch.cos(self.cache).unsqueeze(0).to(Y.device)
 
 
     def forward(self, Y: torch.Tensor):
@@ -82,10 +82,9 @@ class RotaryPositionalEmbeddings(nn.Module):
         half = d//2
         Y1 = Y[...,:half]
         Y2 = Y[...,half:]
+        
         Y1_new = Y1 * self.cos_cache - Y2 * self.sin_cache
-        Y1_new = Y1_new.to(Y.device)
         Y2_new = Y2 * self.cos_cache + Y1 * self.sin_cache
-        Y2_new = Y2_new.to(Y.device)
         Y = torch.cat([Y1_new,Y2_new], dim=-1).to(Y.device)
 
         return Y
