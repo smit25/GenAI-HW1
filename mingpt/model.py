@@ -75,9 +75,9 @@ class RotaryPositionalEmbeddings(nn.Module):
 
         Make sure that you are building and using your cache when necessary!
         """
-        if self.cache is None:
-            self._build_cache(Y)
         N,d = Y.shape[-2], Y.shape[-1]
+        if self.cache is None or N != self.cache.shape[0]:
+            self._build_cache(Y)
 
         half = d//2
         Y1 = Y[...,:half]
