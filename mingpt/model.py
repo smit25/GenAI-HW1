@@ -82,6 +82,9 @@ class RotaryPositionalEmbeddings(nn.Module):
         half = d//2
         Y1 = Y[...,:half]
         Y2 = Y[...,half:]
+
+        print(Y1.shape, Y2.shape, self.cos_cache.shape, self.sin_cache.shape)
+        print("d", d, "N", N)
         
         Y1_new = Y1 * self.cos_cache - Y2 * self.sin_cache
         Y2_new = Y2 * self.cos_cache + Y1 * self.sin_cache
