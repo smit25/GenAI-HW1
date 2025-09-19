@@ -83,8 +83,10 @@ class RotaryPositionalEmbeddings(nn.Module):
         Y1 = Y[...,:half]
         Y2 = Y[...,half:]
         Y1_new = Y1 * self.cos_cache - Y2 * self.sin_cache
+        Y1_new = Y1_new.to(Y.device)
         Y2_new = Y2 * self.cos_cache + Y1 * self.sin_cache
-        Y = torch.cat([Y1_new,Y2_new], dim=-1)
+        Y2_new = Y2_new.to(Y.device)
+        Y = torch.cat([Y1_new,Y2_new], dim=-1).to(Y.device)
 
         return Y
 
