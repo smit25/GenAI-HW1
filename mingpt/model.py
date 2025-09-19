@@ -205,9 +205,10 @@ class GroupedQueryAttention(nn.Module):
         assert config.n_embd % self.n_kv_head == 0
         assert self.n_head % self.n_kv_head == 0
         self.g = self.n_head // self.n_kv_head
+        self.head_dim = config.n_embd // self.n_head
         self.q_proj = nn.Linear(config.n_embd, config.n_embd) # Do NOT rename q_proj.
-        self.k_proj = nn.Linear(config.n_embd, config.n_embd) # Do NOT rename k_proj.
-        self.v_proj = nn.Linear(config.n_embd, config.n_embd) # Do NOT rename v_proj.
+        self.k_proj = nn.Linear(config.n_embd, self.n_kv_head * self.head_dim) # Do NOT rename k_proj.
+        self.v_proj = nn.Linear(config.n_embd, self.n_kv_head * self.head_dim) # Do NOT rename v_proj.
 
         # TODO: Output Projection: you must define this as nn.Linear().
         self.out_proj = nn.Linear(config.n_embd, config.n_embd) # Do NOT rename out_proj.
@@ -223,8 +224,8 @@ class GroupedQueryAttention(nn.Module):
         # TODO:  Implement RoPE for GQA if the config specifies that RoPE should be used
         self.rope = config.rope
         if self.rope:
-            self.query_rotary_pe = RotaryPositionalEmbeddings(d=config.n_embd // self.n_head) # Do NOT rename.
-            self.key_rotary_pe = RotaryPositionalEmbeddings(d=config.n_embd // self.n_head) # Do NOT rename.
+            self.query_rotary_pe = RotaryPositionalEmbeddings(d=self.head_dim) # Do NOT rename.
+            self.key_rotary_pe = RotaryPositionalEmbeddings(d=self.head_dim) # Do NOT rename.
 
 
     def forward(self, x):
@@ -239,9 +240,9 @@ class GroupedQueryAttention(nn.Module):
         k = self.k_proj(x)
         v = self.v_proj(x)
 
-        q = rearrange(q, 'b t (h d) -> b h t d', h=self.n_head)
-        k = rearrange(k, 'b t (h d) -> b h t d', h=self.n_kv_head)
-        v = rearrange(v, 'b t (h d) -> b h t d', h=self.n_kv_head)
+        q = rearrange(q, 'b t (h d) -> b h t d', h=self.n_head, d=self.head_dim)
+        k = rearrange(k, 'b t (h d) -> b h t d', h=self.n_kv_head, d=self.head_dim)
+        v = rearrange(v, 'b t (h d) -> b h t d', h=self.n_kv_head, d=self.head_dim)
 
 
         if self.rope:
